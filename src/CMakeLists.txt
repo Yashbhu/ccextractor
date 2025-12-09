@@ -55,7 +55,11 @@ include_directories(${PROJECT_SOURCE_DIR}/thirdparty/libpng)
 
 # Check if the operating system is macOS (Darwin)
 if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-  if(${CMAKE_HOST_SYSTEM_PROCESSOR} MATCHES "arm64")
+  # Detect Apple Silicon / ARM macs using several CMake variables since
+  # different CMake versions/hosts may populate different names.
+  if(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "arm64|aarch64" OR
+     CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64" OR
+     CMAKE_OSX_ARCHITECTURES MATCHES "arm64|aarch64")
     # ARM Macs
     include_directories("/opt/homebrew/include")
     include_directories(${PROJECT_SOURCE_DIR}/thirdparty/libpng/arm)
@@ -200,6 +204,23 @@ if (PKG_CONFIG_FOUND AND WITH_OCR)
 
   set (EXTRA_LIBS ${EXTRA_LIBS} ${TESSERACT_LIBRARIES})
   set (EXTRA_LIBS ${EXTRA_LIBS} ${LEPTONICA_LIBRARIES})
+
+  # Add include directories reported by pkg-config
+  set (EXTRA_INCLUDES ${EXTRA_INCLUDES} ${TESSERACT_INCLUDE_DIRS})
+  set (EXTRA_INCLUDES ${EXTRA_INCLUDES} ${LEPTONICA_INCLUDE_DIRS})
+
+  # Some pkg-config files for leptonica report the include dir as
+  # .../include/leptonica which causes <leptonica/allheaders.h> to
+  # expand to .../include/leptonica/leptonica/allheaders.h. Add the
+  # parent include directory as well so the include resolves.
+  # Handle multiple include paths by iterating over each one.
+  foreach(LEPT_INC ${LEPTONICA_INCLUDE_DIRS})
+    get_filename_component(LEPT_PARENT "${LEPT_INC}" DIRECTORY)
+    if(LEPT_PARENT)
+      list(APPEND EXTRA_INCLUDES ${LEPT_PARENT})
+    endif()
+  endforeach()
+  list(REMOVE_DUPLICATES EXTRA_INCLUDES)
 
   set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DENABLE_OCR")
 endif (PKG_CONFIG_FOUND AND WITH_OCR)
